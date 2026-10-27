@@ -2,6 +2,7 @@
 #
 # A case is a point in the conversation:
 #   before    the record so far (default: empty)
+#   history   earlier messages, oldest first, each {owner: ...} or {line: ...} (default: none)
 #   asked     the question the owner is replying to (default: none)
 #   message   what the owner writes
 #   expected  the COMPLETE record afterwards; any field not listed must be empty
@@ -283,18 +284,39 @@ cases:
     message: actually I miscounted, it's been 5 times
     expected: {<<: *patient, complaints: [vomiting], vomit_count_24h: 5}
 
-  # Messages that point back to earlier turns. The extractor sees no chat history, so
-  # these measure what that design choice costs.
+  # Messages that point back to earlier turns. The extractor sees the last few messages,
+  # so these measure whether it resolves them without re-reading what was said before.
   - id: threw_up_again
     why: Needs the earlier count; writing 1 would overwrite 3 and lose "persistent".
     before: {<<: *patient, complaints: [vomiting], vomit_count_24h: 3}
+    history:
+      - owner: she's been sick 3 times since this morning
+      - line: Is your pet's poo black and tarry?
     asked: black_tarry_stool
     message: she just threw up again
     expected: {<<: *patient, complaints: [vomiting], vomit_count_24h: 4}
 
   - id: the_one_i_mentioned
-    why: The item was named in an earlier message the extractor never sees.
+    why: The item was named earlier but not as eaten, so it is only in the history.
     before: *vomiting
+    history:
+      - owner: just the once. there was a chocolate bar on the kitchen counter, not sure if
+          she got to it
+      - line: Has your pet eaten anything unusual, like an object or something that might be
+          poisonous?
     asked: ingested_items
     message: yes, the one I mentioned earlier, from the kitchen
     expected: {<<: *vomiting, ingested_items: [chocolate]}
+
+  - id: corrected_count_in_history
+    why: The history holds the first count and its correction; re-reading it could write 2
+      back over 5.
+    before: {<<: *patient, complaints: [vomiting], vomit_count_24h: 5}
+    history:
+      - owner: she's been sick twice today
+      - line: Is your pet's poo black and tarry?
+      - owner: actually I miscounted, it's been 5 times
+      - line: Has your pet's belly swollen up quickly, or does it look tight and bloated?
+    asked: belly_swollen_quickly
+    message: no, it looks normal
+    expected: {<<: *patient, complaints: [vomiting], vomit_count_24h: 5, belly_swollen_quickly: false}

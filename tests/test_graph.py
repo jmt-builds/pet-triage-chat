@@ -1,8 +1,8 @@
 """A whole call through the real graph and clinical content, with a scripted extractor."""
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AnyMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
@@ -33,9 +33,13 @@ class ScriptedExtractor:
     def __init__(self, *replies: Answers | None) -> None:
         """Queue the replies."""
         self._replies: Iterator[Answers | None] = iter(replies)
+        self.histories: list[list[str]] = []
 
-    def extract(self, message: str, last_asked: str | None) -> Answers:
-        """The next scripted reply, or ``ExtractionError`` for ``None``."""
+    def extract(
+        self, message: str, last_asked: str | None, history: Sequence[AnyMessage] = ()
+    ) -> Answers:
+        """The next scripted reply, or ``ExtractionError`` for ``None``. Keeps each history."""
+        self.histories.append([earlier.text for earlier in history])
         answers = next(self._replies)
         if answers is None:
             raise ExtractionError("scripted failure")
@@ -45,7 +49,9 @@ class ScriptedExtractor:
 class UnreachableExtractor:
     """An extractor whose model can never be reached."""
 
-    def extract(self, message: str, last_asked: str | None) -> Answers:
+    def extract(
+        self, message: str, last_asked: str | None, history: Sequence[AnyMessage] = ()
+    ) -> Answers:
         """Always ``ModelUnavailableError``."""
         raise ModelUnavailableError("scripted outage")
 
@@ -116,3 +122,11 @@ def test_an_unreachable_model_gets_the_fail_safe_at_once() -> None:
     app = graph_with(UnreachableExtractor())
     reply = say(app, "my dog is vomiting")
     assert reply == f"{OPENER.format(phone=PHONE)}\n\n{FAIL_SAFE.format(phone=PHONE)}"
+
+
+def test_the_extractor_is_given_the_messages_before_the_latest() -> None:
+    extractor = ScriptedExtractor({}, {"pet": "Bella"})
+    app = graph_with(extractor)
+    opener = say(app, "Hi")
+    say(app, "Bella")
+    assert extractor.histories == [[], ["Hi", opener]]

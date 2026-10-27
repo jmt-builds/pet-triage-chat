@@ -2,13 +2,16 @@
 
 from typing import Any
 
+import pytest
 import yaml
+from langchain_core.messages import AIMessage, HumanMessage
 
 from evals.extraction import (
     CASES,
     RUNS,
     invented,
     load_cases,
+    messages,
     missing,
     overwritten,
     typed,
@@ -23,6 +26,7 @@ def test_every_case_loads_with_real_fields_and_unique_ids() -> None:
     assert len(ids) == len(set(ids))
     for case in cases:
         typed(case.get("before", {}))  # raises KeyError on a field that isn't an observation
+        messages(case.get("history", []))  # raises ValueError on an unknown speaker
     assert len(load_cases()) == len(cases) * RUNS
 
 
@@ -52,3 +56,14 @@ def test_lower_urgency_than_expected_is_under_triage() -> None:
     assert under_triage(
         outputs={"answers": {}, "urgency": 1}, expectations={"answers": {}, "urgency": 3}
     )
+
+
+def test_history_entries_become_owner_and_line_messages() -> None:
+    history = messages([{"owner": "she's sick"}, {"line": "How many times?"}])
+    assert [type(message) for message in history] == [HumanMessage, AIMessage]
+    assert [message.text for message in history] == ["she's sick", "How many times?"]
+
+
+def test_a_history_entry_with_an_unknown_speaker_fails_loudly() -> None:
+    with pytest.raises(ValueError, match="Unknown speaker"):
+        messages([{"vet": "hello"}])

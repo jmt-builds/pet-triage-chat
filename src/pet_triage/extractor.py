@@ -1,11 +1,12 @@
 """Turns an owner's message into typed answers. The only place the model reads owner text.
 
 The extractor never decides what an answer means: thresholds and item lists are applied
-afterwards by the domain's conditions. It sees only what it needs for one message, never
-the engine's state.
+afterwards by the domain's conditions. It sees only what it needs for one message (the
+message, the question asked and the last few messages before it), never the engine's
+state.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, make_dataclass
 from datetime import datetime, time, timedelta
 from operator import itemgetter
@@ -14,20 +15,25 @@ from typing import Any, Literal, Protocol
 import httpx
 from langchain.agents.middleware.pii import detect_credit_card, detect_email
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import TypeAdapter, ValidationError
 
 from pet_triage.domain.observation import OTHER, Answers, Kind, Observation
 
-PROMPT_VERSION = "extract@1"
+PROMPT_VERSION = "extract@2"
 """Recorded on every trace and record, so results can be tied to the prompt."""
+
+#Earlier messages shown with each new one: the last two exchanges
+HISTORY_MESSAGES = 4
 
 PROMPT = f"""You read one message from a dog owner on a vet triage line and record only \
 what they actually said.
 
 Rules:
-- Fill in a field only if the message answers it. Leave every other field empty.
+- Fill in a field only if the latest message answers it. Leave every other field empty.
+- Earlier messages, if shown, are only there so you can tell what the latest message \
+refers to, like "the one I mentioned" or "again". Never record something said only earlier.
 - Never guess. An owner who says they don't know has not answered.
 - Where a field lists allowed values, use one of them, or "{OTHER}" for anything not listed.
 - For when something happened, give the hours ago if the owner said so; otherwise give \
@@ -61,12 +67,16 @@ class ModelUnavailableError(Exception):
 class Extractor(Protocol):
     """Reads one owner message. The real one calls a model; tests use a scripted fake."""
 
-    def extract(self, message: str, last_asked: str | None) -> Answers:
+    def extract(
+        self, message: str, last_asked: str | None, history: Sequence[AnyMessage] = ()
+    ) -> Answers:
         """Extract answers from one owner message.
 
         Args:
             message: What the owner typed.
             last_asked: ID of the question the owner is replying to, if any.
+            history: The conversation before this message, oldest first. Only the last
+                ``HISTORY_MESSAGES`` are shown, to resolve what the message refers to.
 
         Returns:
             The answers found. Anything not mentioned is left out, meaning unknown.
@@ -92,6 +102,11 @@ class LangChainExtractor:
     Reaching the model is a different failure: a refused connection is retried twice, with
     backoff (``with_retry``), then ``ModelUnavailableError`` is raised. Timeouts aren't
     retried, so a hung model can't keep the owner waiting several timeouts long.
+
+    The last few messages before this one are shown as context, so "the one I mentioned"
+    can be resolved, but the prompt only lets the model record what the latest message
+    says. A "no" read from history still only counts for the question just asked, as the
+    engine drops any other.
 
     Emails and card numbers are redacted before the model sees the message, with
     LangChain's PII detectors, so they stay out of prompts and traces even if a hosted
@@ -126,9 +141,13 @@ class LangChainExtractor:
         )
         self._chain = prompt | reader
 
-    def extract(self, message: str, last_asked: str | None) -> Answers:
+    def extract(
+        self, message: str, last_asked: str | None, history: Sequence[AnyMessage] = ()
+    ) -> Answers:
         """Implement ``Extractor.extract`` with one chain call."""
-        context = f"The owner was asked: {self._questions[last_asked]}\n" if last_asked else ""
+        context = describe_history(history)
+        if last_asked:
+            context += f"The owner was asked: {self._questions[last_asked]}\n"
         try:
             reply = self._chain.invoke({"message": f"{context}The owner wrote: {_redact(message)}"})
         except httpx.ConnectError as error:
@@ -146,6 +165,21 @@ class LangChainExtractor:
         if isinstance(value, DayAndTime):
             return hours_between(self._now(), value.days_ago, value.time)
         return value
+
+
+def describe_history(history: Sequence[AnyMessage]) -> str:
+    """The last ``HISTORY_MESSAGES`` messages for the prompt, redacted, or "" if none.
+
+    The evaluation's baseline is given the same lines.
+    """
+    lines = [
+        f"{'Owner' if isinstance(message, HumanMessage) else 'Triage line'}: "
+        f"{_redact(message.text)}"
+        for message in history[-HISTORY_MESSAGES:]
+    ]
+    if not lines:
+        return ""
+    return "Earlier in the conversation:\n" + "\n".join(lines) + "\n"
 
 
 def _redact(message: str) -> str:

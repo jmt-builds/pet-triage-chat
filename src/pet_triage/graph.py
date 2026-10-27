@@ -82,12 +82,14 @@ class TriageNodes:
     def extract(self, state: TriageState) -> Command[Literal["assess", "fail", "reply"]]:
         """Read the latest owner message into ``Answers``, then assess them.
 
+        The messages before it go to the extractor too, which shows it the last few.
+
         If the model can't be reached, the owner gets the fail-safe at once: asking them to
         rephrase wouldn't help. The triage is left as it was, so a later message carries on.
         """
-        message = state["messages"][-1].text
+        *history, latest = state["messages"]
         try:
-            answers = self._extractor.extract(message, _triage(state).last_asked)
+            answers = self._extractor.extract(latest.text, _triage(state).last_asked, history)
         except ExtractionError as error:
             logger.warning("Extraction failed: %s", error)
             return Command(goto="fail")

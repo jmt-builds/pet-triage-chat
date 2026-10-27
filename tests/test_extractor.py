@@ -5,16 +5,18 @@ from datetime import datetime
 
 import httpx
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langchain_core.outputs import ChatResult
 
 from fakes import ScriptedChatModel
 from pet_triage.domain.observation import Kind, Observation
 from pet_triage.extractor import (
+    HISTORY_MESSAGES,
     ExtractionError,
     LangChainExtractor,
     ModelUnavailableError,
     _redact,
+    describe_history,
     hours_between,
 )
 
@@ -111,3 +113,21 @@ def test_emails_and_card_numbers_are_redacted_before_the_model_sees_them() -> No
     assert _redact(message) == (
         "email me at [REDACTED_EMAIL], card [REDACTED_CREDIT_CARD], she was sick at 9"
     )
+
+
+def test_no_history_adds_nothing_to_the_prompt() -> None:
+    assert describe_history([]) == ""
+
+
+def test_history_shows_only_the_last_messages_labelled_and_redacted() -> None:
+    history: list[AnyMessage] = [
+        HumanMessage("the oldest, not shown"),
+        *[AIMessage(f"question {n}") for n in range(HISTORY_MESSAGES - 1)],
+        HumanMessage("write to me at owner@example.com"),
+    ]
+    lines = describe_history(history).splitlines()
+    assert lines[0] == "Earlier in the conversation:"
+    assert len(lines) == 1 + HISTORY_MESSAGES
+    assert "oldest" not in describe_history(history)
+    assert lines[1] == "Triage line: question 0"
+    assert lines[-1] == "Owner: write to me at [REDACTED_EMAIL]"

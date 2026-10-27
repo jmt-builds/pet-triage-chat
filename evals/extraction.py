@@ -1,10 +1,10 @@
 """Extraction evaluation: one owner turn at a time, against the real model.
 
-Each case in ``extraction.yaml`` is a point in a conversation: the record so far, the
-question just asked, and the owner's reply. The real extractor reads the reply and the real
-engine merges it into the record, exactly as in production, where the extractor sees only
-the latest message and the question. The record that comes out is scored against the one
-expected.
+Each case in ``extraction.yaml`` is a point in a conversation: the record so far, any
+earlier messages, the question just asked, and the owner's reply. The real extractor reads
+the reply and the real engine merges it into the record, exactly as in production, where
+the extractor sees the latest message, the question and the last few messages before it.
+The record that comes out is scored against the one expected.
 
 Every case runs ``RUNS`` times, because the model's output can vary. Run it inside the
 agent container, so it uses the same model, Ollama and MLflow as the app::
@@ -27,6 +27,7 @@ from typing import Any, cast
 import mlflow
 import yaml
 from langchain.agents.structured_output import StructuredOutputError
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from mlflow.genai.scorers import Scorer, scorer
 
 from evals import baseline
@@ -55,6 +56,7 @@ def load_cases(path: Path = CASES) -> list[dict[str, Any]]:
         {
             "inputs": {
                 "before": case.get("before", {}),
+                "history": case.get("history", []),
                 "asked": case.get("asked"),
                 "message": case["message"],
             },
@@ -85,6 +87,22 @@ def _typed(observation: Observation, value: Any) -> Value:  # noqa: ANN401
     if observation.kind in (Kind.NUMBER, Kind.HOURS_AGO):
         return float(value)
     return cast(Value, value)
+
+
+def messages(history: list[dict[str, str]]) -> list[AnyMessage]:
+    """A case's history as chat messages: each entry is ``{owner: ...}`` or ``{line: ...}``.
+
+    Raises:
+        ValueError: If an entry isn't one of those, so a typo in a case fails loudly.
+    """
+    speakers = {"owner": HumanMessage, "line": AIMessage}
+    result: list[AnyMessage] = []
+    for entry in history:
+        ((speaker, text),) = entry.items()
+        if speaker not in speakers:
+            raise ValueError(f"Unknown speaker {speaker!r}; use owner or line.")
+        result.append(speakers[speaker](text))
+    return result
 
 
 def plain(answers: Answers) -> dict[str, Any]:
@@ -120,10 +138,15 @@ def play_turn_with(extractor: LangChainExtractor) -> Callable[..., dict[str, Any
     """
 
     @mlflow.trace
-    def play_turn(before: dict[str, Any], asked: str | None, message: str) -> dict[str, Any]:
+    def play_turn(
+        before: dict[str, Any],
+        history: list[dict[str, str]],
+        asked: str | None,
+        message: str,
+    ) -> dict[str, Any]:
         triage = Triage(answers=typed(before), last_asked=asked)
         try:
-            extracted = extractor.extract(message, asked)
+            extracted = extractor.extract(message, asked, messages(history))
         except ExtractionError:
             answers = plain(triage.answers)
             return {"failed": True, "answers": answers, "urgency": urgency(triage.answers)}
@@ -141,9 +164,14 @@ def judge_turn_with(judge: baseline.BaselineJudge) -> Callable[..., dict[str, An
     """The function MLflow evaluates for the baseline: the same turn, judged by the model."""
 
     @mlflow.trace
-    def judge_turn(before: dict[str, Any], asked: str | None, message: str) -> dict[str, Any]:
+    def judge_turn(
+        before: dict[str, Any],
+        history: list[dict[str, str]],
+        asked: str | None,
+        message: str,
+    ) -> dict[str, Any]:
         try:
-            judgement = judge.judge(before, asked, message)
+            judgement = judge.judge(before, asked, message, messages(history))
         except StructuredOutputError:
             return {"failed": True, "urgency": -1}
         if judgement.out_of_scope:

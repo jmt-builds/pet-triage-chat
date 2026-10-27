@@ -1,33 +1,33 @@
 """The baseline the structured design is measured against: the model judges urgency itself.
 
 It gets the same model and settings, the same inputs per case (what is already known, the
-question just asked and the owner's reply), the same field descriptions as the extractor,
-the same clinical criteria, written into its prompt from ``PATHWAYS``, and the same scope:
-what owners are told the demo covers. The only difference is who applies the criteria:
-here the model, in the structured design code. It exists only for the evaluation and is
-never served.
+last few messages, the question just asked and the owner's reply), the same field
+descriptions as the extractor, the same clinical criteria, written into its prompt from
+``PATHWAYS``, and the same scope: what owners are told the demo covers. The only difference
+is who applies the criteria: here the model, in the structured design code. It exists only
+for the evaluation and is never served.
 """
 
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ProviderStrategy
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AnyMessage, HumanMessage
 
 from pet_triage.domain.condition import AnyOf, AtLeast, Condition, Yes
 from pet_triage.domain.observation import Kind, Observation
 from pet_triage.domain.outcome import Outcome
 from pet_triage.domain.pathway import Pathway
 from pet_triage.domain.symptom import Symptom
-from pet_triage.extractor import describe_fields
+from pet_triage.extractor import describe_fields, describe_history
 from pet_triage.messages import CONCERNS_COVERED, SPECIES_COVERED
 
 # Recorded on every evaluation run, so results can be tied to the prompt
-PROMPT_VERSION = "baseline@1"
+PROMPT_VERSION = "baseline@2"
 PROMPT = """You read messages from a dog owner on a vet triage line and decide how urgently \
 the dog needs to be seen, using only the criteria below.
 
@@ -93,13 +93,20 @@ class BaselineJudge:
             model, system_prompt=prompt, response_format=ProviderStrategy(Judgement)
         )
 
-    def judge(self, before: Mapping[str, object], asked: str | None, message: str) -> Judgement:
+    def judge(
+        self,
+        before: Mapping[str, object],
+        asked: str | None,
+        message: str,
+        history: Sequence[AnyMessage] = (),
+    ) -> Judgement:
         """The model's judgement of the case after the owner's reply.
 
         Args:
             before: What is already known, keyed by field.
             asked: ID of the question the owner is replying to, if any.
             message: What the owner wrote.
+            history: The conversation before the reply; the extractor's last few are shown.
 
         Returns:
             The outcome, and whether the call is out of scope.
@@ -108,6 +115,8 @@ class BaselineJudge:
             f"It is now {self._now():%H:%M on %A %d %B %Y}.",
             f"Already known: {json.dumps(before)}",
         ]
+        if history:
+            lines.append(describe_history(history).rstrip("\n"))
         if asked:
             lines.append(f"The owner was asked: {self._questions[asked]}")
         lines.append(f"The owner wrote: {message}")

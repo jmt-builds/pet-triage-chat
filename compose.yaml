@@ -68,6 +68,8 @@ services:
       # No usage data to MLflow's servers. Its telemetry also deadlocked evaluation runs:
       # scorer threads importing the same module at once.
       MLFLOW_DISABLE_TELEMETRY: "true"
+      # The image has no git or .git, so MLflow can't tag runs with a commit. Say so quietly.
+      GIT_PYTHON_REFRESH: quiet
     # Healthy once the server answers, which is after the graph is built and the model warm.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:2024/ok')"]

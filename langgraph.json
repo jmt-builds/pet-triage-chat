@@ -1,0 +1,6 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "triage": "./src/pet_triage/app.py:graph"
+  }
+}

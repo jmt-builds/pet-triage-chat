@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.idea/
+.DS_Store
+.env
+
+# Runtime output.
+.langgraph_api/
+mlruns/
+
+# Copyright CVMA: cited in the docs, not redistributed
+symptom_triage.jpeg

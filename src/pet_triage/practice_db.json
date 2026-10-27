@@ -1,0 +1,34 @@
+{
+  "patients": [
+    {
+      "id": "pat-001",
+      "client_id": "client-001",
+      "name": "Bella",
+      "species": "dog",
+      "breed": "Labrador",
+      "sex": "female",
+      "neutered": true,
+      "age_years": 6.0
+    },
+    {
+      "id": "pat-002",
+      "client_id": "client-001",
+      "name": "Milo",
+      "species": "cat",
+      "breed": "domestic shorthair",
+      "sex": "male",
+      "neutered": true,
+      "age_years": 3.0
+    },
+    {
+      "id": "pat-003",
+      "client_id": "client-002",
+      "name": "Rex",
+      "species": "dog",
+      "breed": "Border Collie",
+      "sex": "male",
+      "neutered": false,
+      "age_years": 4.0
+    }
+  ]
+}

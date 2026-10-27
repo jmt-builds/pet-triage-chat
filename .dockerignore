@@ -1,0 +1,12 @@
+.git
+.venv
+.idea
+.DS_Store
+**/__pycache__
+.mypy_cache
+.pytest_cache
+.ruff_cache
+tests
+docker
+symptom_triage.jpeg
+.env

@@ -18,6 +18,8 @@ class Settings(BaseSettings):
             1 second per message instead of 0.4.
         temperature: The model's sampling temperature. 0 makes its readings repeatable;
             some thinking models, like Qwen, loop at 0 and need their recommended value.
+        context_length: The model's context window in tokens, set on every call. The
+            prompts are under 1k; a thinking model needs room for its thinking too.
         ollama_base_url: Where the Ollama server listens. Compose points it at its own
             Ollama service.
         timeout_seconds: How long one model call may take before it fails, so a hung
@@ -29,5 +31,6 @@ class Settings(BaseSettings):
     model: str = "gemma4:e4b"
     thinking: bool = True
     temperature: float = 0.0
+    context_length: int = 8192
     ollama_base_url: str = "http://localhost:11434"
     timeout_seconds: float = 60.0

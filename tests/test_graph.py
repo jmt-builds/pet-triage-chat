@@ -20,7 +20,7 @@ from pet_triage.graph import TriageNodes, TriageState, build_graph, make_engine
 from pet_triage.intake import pet_observation
 from pet_triage.messages import ANNOUNCEMENTS, FAIL_SAFE, OPENER, REPHRASE, YOUR_PET
 from pet_triage.practice import get_client_patients
-from pet_triage.record import TriageRecord
+from pet_triage.record import ModelParams, TriageRecord
 
 PHONE = "01632 960000"
 PET = pet_observation(get_client_patients(Settings().client_id))
@@ -109,6 +109,7 @@ def test_a_whole_call_ends_with_advice_and_a_record() -> None:
     assert record.patient.name == "Bella"
     assert "pet" not in record.observations
     assert len(record.owner_messages) == 6
+    assert record.audit.params == ModelParams(thinking=True, temperature=0.0, context_length=8192)
 
 
 def test_failed_extractions_ask_to_rephrase_then_give_up() -> None:

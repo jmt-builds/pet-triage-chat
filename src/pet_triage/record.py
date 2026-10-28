@@ -13,12 +13,28 @@ from pet_triage.domain.outcome import Outcome
 from pet_triage.domain.patient import Patient
 
 
+class ModelParams(BaseModel):
+    """The settings the model ran with, which can change what it reads.
+
+    Attributes:
+        thinking: Whether the model thought before answering.
+        temperature: The sampling temperature; 0 makes the readings repeatable.
+        context_length: The context window in tokens.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    thinking: bool
+    temperature: float
+    context_length: int
+
+
 class Audit(BaseModel):
     """How a record was produced, so any outcome can be traced back.
 
     Attributes:
         model: The LLM tag used.
-        thinking: Whether the model thought before answering.
+        params: The settings it ran with.
         prompt_version: The extraction prompt's version.
         thread_id: The conversation's LangGraph thread. MLflow uses it as the session ID, so
             it finds every trace of the conversation (one per turn).
@@ -27,7 +43,7 @@ class Audit(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     model: str
-    thinking: bool
+    params: ModelParams
     prompt_version: str
     thread_id: str
 

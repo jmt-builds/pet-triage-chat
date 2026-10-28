@@ -41,7 +41,7 @@ from pet_triage.extractor import (
 from pet_triage.intake import PET_ID, SUPPORTED_SPECIES, pet_observation
 from pet_triage.messages import render
 from pet_triage.practice import get_client_patients
-from pet_triage.record import Assessment, Audit, TriageRecord
+from pet_triage.record import Assessment, Audit, ModelParams, TriageRecord
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +155,11 @@ class TriageNodes:
             ),
             audit=Audit(
                 model=self._settings.model,
-                thinking=self._settings.thinking,
+                params=ModelParams(
+                    thinking=self._settings.thinking,
+                    temperature=self._settings.temperature,
+                    context_length=self._settings.context_length,
+                ),
                 prompt_version=PROMPT_VERSION,
                 thread_id=thread_id,
             ),
@@ -223,6 +227,7 @@ def make_model(settings: Settings) -> BaseChatModel:
         f"ollama:{settings.model}",
         base_url=settings.ollama_base_url,
         temperature=settings.temperature,
+        num_ctx=settings.context_length,
         reasoning=settings.thinking,
         validate_model_on_init=True,
         client_kwargs={"timeout": settings.timeout_seconds},

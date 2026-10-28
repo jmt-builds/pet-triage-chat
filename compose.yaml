@@ -62,6 +62,7 @@ services:
     environment:
       MODEL: *model
       THINKING: ${THINKING:-true}
+      TEMPERATURE: ${TEMPERATURE:-0}
       OLLAMA_BASE_URL: http://ollama:11434
       MLFLOW_TRACKING_URI: http://mlflow:5000
       MLFLOW_EXPERIMENT_NAME: pet-triage

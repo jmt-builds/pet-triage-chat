@@ -222,7 +222,7 @@ def make_model(settings: Settings) -> BaseChatModel:
     return init_chat_model(
         f"ollama:{settings.model}",
         base_url=settings.ollama_base_url,
-        temperature=0,
+        temperature=settings.temperature,
         reasoning=settings.thinking,
         validate_model_on_init=True,
         client_kwargs={"timeout": settings.timeout_seconds},

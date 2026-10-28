@@ -305,6 +305,7 @@ def main() -> None:
                 "design": name,
                 "model": settings.model,
                 "thinking": settings.thinking,
+                "temperature": settings.temperature,
                 "prompt_version": design.prompt_version,
             }
         )

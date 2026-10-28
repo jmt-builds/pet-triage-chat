@@ -49,12 +49,12 @@ ssh -N -L 3000:localhost:3000 -L 5000:localhost:5000 <user>@<host>
 The browser must reach the chat on port 3000. If a port is taken on the server, copy
 `.env.example` to `.env` and change the server side there.
 
-**Try another model** by setting `MODEL`, `THINKING` and `CONTEXT_LENGTH` in `.env` (see
-`.env.example`). `MODEL` takes an Ollama tag or a GGUF repo on Hugging Face
+**Try another model** by setting `MODEL`, `THINKING`, `TEMPERATURE` and `CONTEXT_LENGTH`
+in `.env` (see `.env.example`). `MODEL` takes an Ollama tag or a GGUF repo on Hugging Face
 (`hf.co/<user>/<repo>:<quantisation>`). Then `docker compose up -d --wait` pulls it and
 restarts what changed; nothing is rebuilt.
 
-**Run the evaluation** (45 owner messages, three runs each, logged to the MLflow experiment
+**Run the evaluation** (46 owner messages, three runs each, logged to the MLflow experiment
 `pet-triage-eval`):
 
 ```bash
@@ -90,41 +90,37 @@ is a data change only.
 
 ### Results
 
-The evaluation scores one owner message at a time. "Correct" means the outcome the clinical
-rules give for what the owner said, not a clinical judgement. The baseline is one model
-call that gets the same facts, field descriptions, criteria and scope, and judges the
-urgency itself; only who applies the rules differs. With `gemma4:e4b`, thinking on,
-prompts `extract@1` and `baseline@1`, 135 runs each:
+Each owner message is scored on its own against the outcome the clinical rules give. The
+baseline is one model call with the same inputs that judges the urgency itself. With
+`gemma4:e4b`, thinking on, 45 cases run three times each:
 
 | Design | Correct | Under-triage | Over-triage | Failed |
 |---|---|---|---|---|
-| Structured (model reads, code decides) | 122 | 13 | 0 | 5 |
-| Baseline (model decides) | 120 | 5 | 10 | 0 |
+| Structured (model reads, code decides) | 125 | 10 | 0 | 8 |
+| Baseline (model decides) | 123 | 2 | 10 | 0 |
 
-The structured design is **not** safer per message: the baseline under-triages less, 5
-runs to 13. Repeat runs of a case are nearly identical, so the real sample is 45 cases. The
-structured design's 13 under-triages come from 6 of them: three where vomiting hides a
-complaint the demo doesn't cover (a collapse, twice, and a limp), so the call is triaged
-instead of sent out of scope; "the one I mentioned"; a Dairy Milk bar not read as
-chocolate; and "vomiting blood" once. The baseline's 5 come from 3 of the same cases.
-What code buys is predictability: 9 of the baseline's 10 over-triages name an urgency
-when nothing applies yet ("hello"). Repeat runs vary by a few counts even at temperature 0,
-so small differences are noise. "Failed" means the model's reply couldn't be read; the
-owner is asked again. Thinking matters: on an earlier set of cases, turning it off took the
-structured design from 8 under-triages to 27, for a median of 0.4 s per message instead
-of 1.1 s.
+- The structured design is **not** safer per message. Its under-triages come from
+  extraction misses: a collapse or limp hidden behind vomiting, a chocolate brand not
+  recognised, and a time without a clock time.
+- What code buys is predictability: 9 of the baseline's 10 over-triages name an urgency
+  when nothing applies yet ("hello").
+- Whole runs vary by a few counts even at temperature 0, so small differences are noise.
+- "Failed" means the reply couldn't be read and the owner is asked again. `poo_no` isn't
+  scored yet: YAML reads its message, `no`, as `false`.
 
 ### Known trade-offs
 
-- **No chat history.** The model sees only the latest message and the question asked, so
-  every answer traces to one message, but "the one I mentioned" can't be resolved.
+- **Read-only history.** The model sees the last four messages but records only what the
+  latest one says, so every answer traces to one message. "She's just thrown up again"
+  doesn't add one to the count.
 - **The latest answer wins.** A later message can overwrite a good answer, including the
   complaint, and the per-message evaluation can't see it. Corrections aren't always
   picked up.
 - **Each question is asked once.** An owner who replies with a question of their own loses
   that answer, and their question goes unanswered because every reply is fixed text.
 - **Vague times aren't recorded.** "The day before yesterday in the evening" has no clock
-  time, so an over-24-hour foreign body stays one level too low.
+  time, so an over-24-hour foreign body stays one level too low. One unreadable time fails
+  the whole reply, losing the rest of the message.
 - **Served by `langgraph dev`**, LangGraph's in-memory development server, so the demo runs
   with one command: conversations are lost when the agent restarts and there's no auth.
   Production would serve the graph with a persistent checkpointer (`build_graph` already
@@ -141,8 +137,6 @@ of 1.1 s.
   criteria, against this workflow, in that simulation.
 - **Over-triage cases.** Hypotheticals ("could she have eaten grapes?"), another animal
   ("my other dog ate a sock") and near-miss items ("chocolate-flavoured treats").
-- **Short chat history.** Whether the last few turns fix "the one I mentioned" without
-  costing traceability.
 - **Other models**, on the same cases.
 
 ## Develop

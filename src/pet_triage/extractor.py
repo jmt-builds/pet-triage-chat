@@ -21,10 +21,10 @@ from pydantic import TypeAdapter, ValidationError
 
 from pet_triage.domain.observation import OTHER, Answers, Kind, Observation
 
-PROMPT_VERSION = "extract@2"
+PROMPT_VERSION = "extract@3"
 """Recorded on every trace and record, so results can be tied to the prompt."""
 
-#Earlier messages shown with each new one: the last two exchanges
+# Earlier messages shown with each new one: the last two exchanges
 HISTORY_MESSAGES = 4
 
 PROMPT = f"""You read one message from a dog owner on a vet triage line and record only \
@@ -33,7 +33,7 @@ what they actually said.
 Rules:
 - Fill in a field only if the latest message answers it. Leave every other field empty.
 - Earlier messages, if shown, are only there so you can tell what the latest message \
-refers to, like "the one I mentioned" or "again". Never record something said only earlier.
+refers to, like "the one I mentioned". Never record something said only earlier.
 - Never guess. An owner who says they don't know has not answered.
 - Where a field lists allowed values, use one of them, or "{OTHER}" for anything not listed.
 - For when something happened, give the hours ago if the owner said so; otherwise give \
